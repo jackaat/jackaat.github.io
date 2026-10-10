@@ -33,6 +33,9 @@ h1{font-size:22px;margin:4px 0 12px}
 .ad{color:var(--sub);font-size:14px;margin:2px 0 8px}
 .tg{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .tg span{background:var(--chip);border-radius:8px;padding:2px 8px;font-size:13px}
+.locbtn{width:44px;height:44px;border-radius:50%;border:0;background:#fff;color:#1565c0;box-shadow:0 1px 5px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer}
+.locbtn.busy{opacity:.5}
+footer{margin:24px 0 8px;color:var(--sub);font-size:13px;line-height:1.7}footer a{color:var(--accent)}
 .row{display:flex;gap:8px}
 .row a,.row button{flex:1;display:flex;align-items:center;justify-content:center;min-height:44px;border-radius:10px;border:1px solid var(--accent);background:transparent;color:var(--accent);text-decoration:none;font-weight:700;font-size:16px}
 </style>
@@ -51,6 +54,7 @@ h1{font-size:22px;margin:4px 0 12px}
 <div id="map"></div>
 <div id="msg">資料載入中…</div>
 <div id="list"></div>
+<footer>資料來源：環境部「全國公廁建檔資料」（政府資料開放授權條款）；地圖 © OpenStreetMap 貢獻者。資料僅供參考，實際狀況以現場為準。<br><a href="privacy.html">隱私權政策</a></footer>
 </main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
@@ -63,6 +67,36 @@ function fmt(m){return m<1000?Math.round(m/10)*10+' 公尺':(m/1000).toFixed(1)+
 var map=L.map('map',{zoomControl:true}).setView([23.7,120.9],7);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap 貢獻者'}).addTo(map);
 var layer=L.layerGroup().addTo(map),me=null;
+function setMe(){
+  if(me)map.removeLayer(me);
+  me=L.circleMarker([pos.lat,pos.lng],{radius:9,color:'#fff',weight:3,fillColor:'#f57c00',fillOpacity:1}).addTo(map);
+}
+function recenter(){
+  var b=document.querySelector('.locbtn');
+  if(!D.length){$('msg').textContent='資料還在載入，請稍候再試。';return}
+  if(!navigator.geolocation){$('msg').textContent='這個瀏覽器不支援定位。';return}
+  b.classList.add('busy');
+  navigator.geolocation.getCurrentPosition(function(p){
+    pos={lat:p.coords.latitude,lng:p.coords.longitude};
+    setMe();
+    map.setView([pos.lat,pos.lng],Math.max(map.getZoom(),16));
+    render(false);
+    $('go').textContent='重新定位';
+    b.classList.remove('busy');
+  },function(e){
+    b.classList.remove('busy');
+    $('msg').textContent=e.code===1?'位置權限被拒絕。請到瀏覽器的網站設定允許位置。':'無法取得位置（'+e.message+'）。';
+  },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+}
+var LocBtn=L.Control.extend({options:{position:'bottomright'},onAdd:function(){
+  var b=L.DomUtil.create('button','leaflet-control locbtn');
+  b.type='button';b.setAttribute('aria-label','回到我的位置');
+  b.innerHTML='<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></svg>';
+  L.DomEvent.disableClickPropagation(b);
+  b.onclick=recenter;
+  return b;
+}});
+map.addControl(new LocBtn());
 
 function focus(i,fromList){
   var els=document.querySelectorAll('.item');
@@ -112,8 +146,7 @@ $('go').onclick=function(){
   b.disabled=true;b.textContent='定位中…';
   navigator.geolocation.getCurrentPosition(function(p){
     pos={lat:p.coords.latitude,lng:p.coords.longitude};
-    if(me)map.removeLayer(me);
-    me=L.circleMarker([pos.lat,pos.lng],{radius:9,color:'#fff',weight:3,fillColor:'#f57c00',fillOpacity:1}).addTo(map);
+    setMe();
     b.disabled=false;b.textContent='重新定位';render(true);
   },function(e){
     b.disabled=false;b.textContent='找離我最近的廁所';
