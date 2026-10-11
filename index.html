@@ -38,59 +38,104 @@ h1{font-size:22px;margin:4px 0 12px}
 footer{margin:24px 0 8px;color:var(--sub);font-size:13px;line-height:1.7}footer a{color:var(--accent)}
 .row{display:flex;gap:8px}
 .row a,.row button{flex:1;display:flex;align-items:center;justify-content:center;min-height:44px;border-radius:10px;border:1px solid var(--accent);background:transparent;color:var(--accent);text-decoration:none;font-weight:700;font-size:16px}
+.hint{color:var(--sub);font-size:13px;margin:6px 2px 0}
+.hd{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.lang{min-height:40px;padding:0 14px;border-radius:20px;border:1px solid var(--line);background:var(--card);color:var(--text);font-weight:700;font-size:15px}
+
 </style>
 </head>
 <body>
 <main>
-<h1>🚻 台灣找廁所</h1>
-<button class="go" id="go">找離我最近的廁所</button>
+<div class="hd"><h1 id="ttl"></h1><button class="lang" id="lang" type="button"></button></div>
+<button class="go" id="go"></button>
 <div class="chips" id="chips">
-<button class="chip" data-m="1" aria-pressed="false">無障礙</button>
-<button class="chip" data-m="2" aria-pressed="false">親子廁所</button>
-<button class="chip" data-m="8" aria-pressed="false">尿布檯</button>
-<button class="chip" data-m="4" aria-pressed="false">性別友善</button>
+<button class="chip" data-m="1" aria-pressed="false"></button>
+<button class="chip" data-m="2" aria-pressed="false"></button>
+<button class="chip" data-m="8" aria-pressed="false"></button>
+<button class="chip" data-m="4" aria-pressed="false"></button>
 </div>
-<input class="q" id="q" type="search" placeholder="或輸入地點或地址，例如：台中火車站" aria-label="搜尋地點或地址">
+<input class="q" id="q" type="search">
+<div class="hint" id="hint"></div>
 <div id="map"></div>
-<div id="msg">資料載入中…</div>
+<div id="msg"></div>
 <div id="list"></div>
-<footer>資料來源：環境部「全國公廁建檔資料」（政府資料開放授權條款）；地圖 © OpenStreetMap 貢獻者。資料僅供參考，實際狀況以現場為準。<br><a href="privacy.html">隱私權政策</a></footer>
+<footer id="ft"></footer>
 </main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-var D=[],pos=null,mask=0,rows=[];
+var T={
+zh:{docTitle:'台灣找廁所',title:'🚻 台灣找廁所',go:'找離我最近的廁所',goBusy:'定位中…',goAgain:'重新定位',c1:'無障礙',c2:'親子廁所',c8:'尿布檯',c4:'性別友善',
+ph:'或輸入地點或地址，例如：台中火車站',loading:'資料載入中…',
+loaded:function(n){return '資料已載入（'+n+' 個地點）。點上方按鈕開始。'},
+wait:'資料還在載入，請稍候再試。',nogeo:'這個瀏覽器不支援定位，請改用搜尋框。',
+denied:'位置權限被拒絕。請到瀏覽器的網站設定允許位置，或改用搜尋框。',
+geoerr:function(m){return '無法取得位置（'+m+'）。請到戶外或稍後再試，或改用搜尋框。'},
+reErr:function(m,h){return '無法更新位置（'+m+'）'+(h?'，已回到上次的位置。':'。')},
+none:'找不到符合條件的廁所。',
+sorted:function(a,b){return '依距離排序，顯示最近 '+a+' 間（符合條件共 '+b+' 間）。'},
+nopos:function(n){return '尚未取得你的位置，以下為搜尋結果（'+n+' 間），未依距離排序。'},
+loadfail:function(m){return '資料載入失敗（'+m+'）。請檢查網路後重新開啟。'},
+hint:'收錄政府登記的開放廁所，其中包含部分便利商店，但並非所有超商都有收錄。超商廁所是否開放、可否使用，以店家現場為準。',t1:'♿ 無障礙',t2:'👶 親子',t8:'尿布檯',t4:'性別友善',see:'在地圖上看',nav:'導航',m:' 公尺',km:' 公里',
+locAria:'回到我的位置',toggle:'EN',toggleAria:'Switch to English',
+foot:'資料來源：環境部「全國公廁建檔資料」（政府資料開放授權條款）；地圖 © OpenStreetMap 貢獻者。資料僅供參考，實際狀況以現場為準。<br><a href="privacy.html">隱私權政策</a>'},
+en:{docTitle:'Taiwan Toilet Finder',title:'🚻 Taiwan Toilet Finder',go:'Find the nearest toilet',goBusy:'Locating…',goAgain:'Update my location',c1:'Accessible',c2:'Family room',c8:'Baby changing',c4:'Gender-neutral',
+ph:'Search a place or address (in Chinese)',loading:'Loading data…',
+loaded:function(n){return 'Data loaded ('+n+' places). Tap the button above to start.'},
+wait:'Data is still loading. Please try again in a moment.',nogeo:'This browser does not support location. Please use the search box.',
+denied:'Location permission denied. Please allow location in your browser or site settings, or use the search box.',
+geoerr:function(m){return 'Could not get your location ('+m+'). Try again outdoors, or use the search box.'},
+reErr:function(m,h){return 'Could not update your location ('+m+')'+(h?'; showing your last known position.':'.')},
+none:'No toilets match your filters.',
+sorted:function(a,b){return 'Sorted by distance: showing the nearest '+a+' ('+b+' match your filters).'},
+nopos:function(n){return 'Your location is not available yet. Showing '+n+' search results, not sorted by distance.'},
+loadfail:function(m){return 'Failed to load data ('+m+'). Please check your connection and reopen the app.'},
+hint:'Lists government-registered public-access toilets. Some convenience stores are included, but not all. Whether a store lets you use its toilet is up to the store.',t1:'♿ Accessible',t2:'👶 Family',t8:'Baby changing',t4:'Gender-neutral',see:'Show on map',nav:'Navigate',m:' m',km:' km',
+locAria:'Back to my location',toggle:'中文',toggleAria:'切換成中文',
+foot:'Source: Ministry of Environment (Taiwan) “National public toilet registry” (Open Government Data License); map © OpenStreetMap contributors. Place names and addresses are in Chinese (official data) – tap “Navigate” to open Google Maps. Information is for reference only; actual conditions may differ.<br><a href="privacy-en.html">Privacy Policy</a>'}
+};
+var lang='';
+try{lang=localStorage.getItem('lang')||''}catch(e){}
+if(lang!=='zh'&&lang!=='en')lang=(navigator.language||'').toLowerCase().indexOf('zh')===0?'zh':'en';
+function t(k){var v=T[lang][k];return typeof v==='function'?v.apply(null,[].slice.call(arguments,1)):v}
+var D=[],pos=null,mask=0,rows=[],M=null,gs='go';
 var $=function(i){return document.getElementById(i)};
+function setMsg(){M=[].slice.call(arguments);$('msg').textContent=t.apply(null,M)}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function dist(a,b,c,d){var r=Math.PI/180,x=(d-b)*r*Math.cos((a+c)/2*r),y=(c-a)*r;return Math.sqrt(x*x+y*y)*6371000}
-function fmt(m){return m<1000?Math.round(m/10)*10+' 公尺':(m/1000).toFixed(1)+' 公里'}
+function fmt(m){return m<1000?Math.round(m/10)*10+t('m'):(m/1000).toFixed(1)+t('km')}
+function goLabel(){return t(gs==='again'?'goAgain':'go')}
 
 var map=L.map('map',{zoomControl:true}).setView([23.7,120.9],7);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap 貢獻者'}).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
 var layer=L.layerGroup().addTo(map),me=null;
 function setMe(){
   if(me)map.removeLayer(me);
   me=L.circleMarker([pos.lat,pos.lng],{radius:9,color:'#fff',weight:3,fillColor:'#f57c00',fillOpacity:1}).addTo(map);
 }
+var moved=false;
+map.on('dragstart',function(){moved=true});
 function recenter(){
   var b=document.querySelector('.locbtn');
-  if(!D.length){$('msg').textContent='資料還在載入，請稍候再試。';return}
-  if(!navigator.geolocation){$('msg').textContent='這個瀏覽器不支援定位。';return}
+  if(!D.length){setMsg('wait');return}
+  if(!navigator.geolocation){setMsg('nogeo');return}
+  moved=false;
+  if(pos)map.setView([pos.lat,pos.lng],Math.max(map.getZoom(),16),{animate:false});
   b.classList.add('busy');
   navigator.geolocation.getCurrentPosition(function(p){
     pos={lat:p.coords.latitude,lng:p.coords.longitude};
     setMe();
-    map.setView([pos.lat,pos.lng],Math.max(map.getZoom(),16));
+    if(!moved)map.setView([pos.lat,pos.lng],Math.max(map.getZoom(),16),{animate:false});
     render(false);
-    $('go').textContent='重新定位';
+    gs='again';$('go').textContent=goLabel();
     b.classList.remove('busy');
   },function(e){
     b.classList.remove('busy');
-    $('msg').textContent=e.code===1?'位置權限被拒絕。請到瀏覽器的網站設定允許位置。':'無法取得位置（'+e.message+'）。';
-  },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+    if(e.code===1)setMsg('denied');else setMsg('reErr',e.message,!!pos);
+  },{enableHighAccuracy:false,timeout:10000,maximumAge:10000});
 }
 var LocBtn=L.Control.extend({options:{position:'bottomright'},onAdd:function(){
   var b=L.DomUtil.create('button','leaflet-control locbtn');
-  b.type='button';b.setAttribute('aria-label','回到我的位置');
+  b.type='button';
   b.innerHTML='<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></svg>';
   L.DomEvent.disableClickPropagation(b);
   b.onclick=recenter;
@@ -108,28 +153,28 @@ function focus(i,fromList){
 function render(fit){
   var q=$('q').value.trim().toLowerCase(),all=[];
   for(var i=0;i<D.length;i++){
-    var t=D[i];
-    if(mask&&(t[4]&mask)!==mask)continue;
-    if(q&&(t[0]+t[1]).toLowerCase().indexOf(q)<0)continue;
-    all.push({t:t,d:pos?dist(pos.lat,pos.lng,t[2],t[3]):0});
+    var x=D[i];
+    if(mask&&(x[4]&mask)!==mask)continue;
+    if(q&&(x[0]+x[1]).toLowerCase().indexOf(q)<0)continue;
+    all.push({t:x,d:pos?dist(pos.lat,pos.lng,x[2],x[3]):0});
   }
   if(pos)all.sort(function(a,b){return a.d-b.d});
   var n=all.length;rows=all.slice(0,20);
   var h='';layer.clearLayers();
   rows.forEach(function(r,i){
-    var t=r.t,tags='';
-    if(t[4]&1)tags+='<span>♿ 無障礙</span>';
-    if(t[4]&2)tags+='<span>👶 親子</span>';
-    if(t[4]&8)tags+='<span>尿布檯</span>';
-    if(t[4]&4)tags+='<span>性別友善</span>';
-    var url='https://www.google.com/maps/dir/?api=1&destination='+t[2]+','+t[3]+'&travelmode=walking';
-    h+='<div class="item"><div class="top"><div class="nm">'+(i+1)+'. '+esc(t[0])+'</div>'+(pos?'<div class="ds">'+fmt(r.d)+'</div>':'')+'</div><div class="ad">'+esc(t[1])+'</div>'+(tags?'<div class="tg">'+tags+'</div>':'')+'<div class="row"><button data-i="'+i+'">在地圖上看</button><a href="'+url+'" target="_blank" rel="noopener">導航</a></div></div>';
-    L.marker([t[2],t[3]],{icon:L.divIcon({className:'',html:'<div class="pin">'+(i+1)+'</div>',iconSize:[28,28],iconAnchor:[14,14]})}).on('click',function(){focus(i,false)}).addTo(layer);
+    var x=r.t,tags='';
+    if(x[4]&1)tags+='<span>'+t('t1')+'</span>';
+    if(x[4]&2)tags+='<span>'+t('t2')+'</span>';
+    if(x[4]&8)tags+='<span>'+t('t8')+'</span>';
+    if(x[4]&4)tags+='<span>'+t('t4')+'</span>';
+    var url='https://www.google.com/maps/dir/?api=1&destination='+x[2]+','+x[3]+'&travelmode=walking';
+    h+='<div class="item"><div class="top"><div class="nm">'+(i+1)+'. '+esc(x[0])+'</div>'+(pos?'<div class="ds">'+fmt(r.d)+'</div>':'')+'</div><div class="ad">'+esc(x[1])+'</div>'+(tags?'<div class="tg">'+tags+'</div>':'')+'<div class="row"><button data-i="'+i+'">'+t('see')+'</button><a href="'+url+'" target="_blank" rel="noopener">'+t('nav')+'</a></div></div>';
+    L.marker([x[2],x[3]],{icon:L.divIcon({className:'',html:'<div class="pin">'+(i+1)+'</div>',iconSize:[28,28],iconAnchor:[14,14]})}).on('click',function(){focus(i,false)}).addTo(layer);
   });
   $('list').innerHTML=h;
-  if(!n)$('msg').textContent='找不到符合條件的廁所。';
-  else if(pos)$('msg').textContent='依距離排序，顯示最近 '+rows.length+' 間（符合條件共 '+n+' 間）。';
-  else $('msg').textContent='尚未取得你的位置，以下為搜尋結果（'+n+' 間），未依距離排序。';
+  if(!n)setMsg('none');
+  else if(pos)setMsg('sorted',rows.length,n);
+  else setMsg('nopos',n);
   if(fit&&rows.length){
     var pts=rows.slice(0,5).map(function(r){return[r.t[2],r.t[3]]});
     if(pos)pts.push([pos.lat,pos.lng]);
@@ -138,19 +183,38 @@ function render(fit){
   }
 }
 
+function applyLang(){
+  document.documentElement.lang=lang==='zh'?'zh-Hant':'en';
+  document.title=t('docTitle');
+  $('ttl').textContent=t('title');
+  $('lang').textContent=t('toggle');$('lang').setAttribute('aria-label',t('toggleAria'));
+  var cs=document.querySelectorAll('.chip');
+  for(var i=0;i<cs.length;i++)cs[i].textContent=t('c'+cs[i].dataset.m);
+  $('hint').textContent=t('hint');$('q').placeholder=t('ph');$('q').setAttribute('aria-label',t('ph'));
+  if(!$('go').disabled)$('go').textContent=goLabel();
+  $('ft').innerHTML=t('foot');
+  var lb=document.querySelector('.locbtn');if(lb)lb.setAttribute('aria-label',t('locAria'));
+}
+$('lang').onclick=function(){
+  lang=lang==='zh'?'en':'zh';
+  try{localStorage.setItem('lang',lang)}catch(e){}
+  applyLang();
+  if(pos||$('q').value.trim())render(false);else if(M)setMsg.apply(null,M);
+};
+
 $('list').onclick=function(e){var b=e.target.closest('button[data-i]');if(b)focus(+b.dataset.i,true)};
 $('go').onclick=function(){
   var b=$('go');
-  if(!D.length){$('msg').textContent='資料還在載入，請稍候再試。';return}
-  if(!navigator.geolocation){$('msg').textContent='這個瀏覽器不支援定位，請改用搜尋框。';return}
-  b.disabled=true;b.textContent='定位中…';
+  if(!D.length){setMsg('wait');return}
+  if(!navigator.geolocation){setMsg('nogeo');return}
+  b.disabled=true;b.textContent=t('goBusy');
   navigator.geolocation.getCurrentPosition(function(p){
     pos={lat:p.coords.latitude,lng:p.coords.longitude};
     setMe();
-    b.disabled=false;b.textContent='重新定位';render(true);
+    gs='again';b.disabled=false;b.textContent=goLabel();render(true);
   },function(e){
-    b.disabled=false;b.textContent='找離我最近的廁所';
-    $('msg').textContent=e.code===1?'位置權限被拒絕。請到瀏覽器的網站設定允許位置，或改用搜尋框。':'無法取得位置（'+e.message+'）。請到戶外或稍後再試，或改用搜尋框。';
+    b.disabled=false;b.textContent=goLabel();
+    if(e.code===1)setMsg('denied');else setMsg('geoerr',e.message);
   },{enableHighAccuracy:true,timeout:15000,maximumAge:30000});
 };
 $('chips').onclick=function(e){
@@ -161,10 +225,12 @@ $('chips').onclick=function(e){
 };
 var tm;$('q').oninput=function(){clearTimeout(tm);tm=setTimeout(function(){render(true)},300)};
 
+applyLang();
+setMsg('loading');
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
 fetch('toilets.json').then(function(r){if(!r.ok)throw new Error(r.status);return r.json()}).then(function(j){
-  D=j;$('msg').textContent='資料已載入（'+D.length+' 個地點）。點上方按鈕開始。';
-}).catch(function(e){$('msg').textContent='資料載入失敗（'+e.message+'）。請確認 toilets.json 已上傳到同一個專案。'});
+  D=j;setMsg('loaded',D.length);
+}).catch(function(e){setMsg('loadfail',e.message)});
 </script>
 </body>
 </html>
